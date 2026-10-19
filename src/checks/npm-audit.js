@@ -269,7 +269,12 @@ function graphFixAction({ graph, targets, label }, pkg, fixed, lockfile) {
     }
   }
   if (blockers.length === 0) {
-    return `Update ${pkg.name} to ${fixed} or later (run "npm audit fix" in ${where})`;
+    // nothing pins it: the declared ranges allow the fix, and only the lockfile is out of date
+    const allowing = unique(targets.flatMap((t) => (graph.parents.get(t) ?? [])
+      .map((e) => (graph.roots.has(e.from) ? manifestOf(lockfile, e.from) : label(e.from)))));
+    if (allowing.length === 0) return `Update ${pkg.name} to ${fixed} or later (run "npm audit fix" in ${where})`;
+    return `Update ${pkg.name} to ${fixed} or later: ${list(allowing)} already ${allowing.length === 1 ? 'allows' : 'allow'} it, `
+      + `so only the lockfile is out of date (run "npm audit fix" in ${where})`;
   }
   const who = blockers.map((b) => `${graph.roots.has(b.from) ? manifestOf(lockfile, b.from) : label(b.from)} (asks for "${b.range}")`);
   const fromManifest = unique(blockers.filter((b) => graph.roots.has(b.from)).map((b) => manifestOf(lockfile, b.from)));

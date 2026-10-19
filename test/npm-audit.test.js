@@ -115,7 +115,7 @@ test('the action names what stands in the way of the fix', () => {
     + 'update web to a release whose dependencies allow it (or force it with an "overrides" entry in apps/orders/package.json), '
     + 'then run "npm install" in apps/orders');
   // lib's range already allows the fix: the lockfile is only stale
-  assert.equal(byName(findings, 'loose').action, 'Update loose to 2.0.5 or later (run "npm audit fix" in apps/orders)');
+  assert.equal(byName(findings, 'loose').action, 'Update loose to 2.0.5 or later: lib 1.0.0 already allows it, so only the lockfile is out of date (run "npm audit fix" in apps/orders)');
   // a bundled copy can only be replaced by the package that bundles it
   assert.equal(byName(findings, 'packed').action, 'packed is bundled inside web 1.0.0, so only a release of web that bundles packed 1.0.1 or later fixes it');
   // a direct dependency pinned in package.json
