@@ -310,11 +310,9 @@ Releases are published by the "Release" workflow in the Actions tab, which
 
 1. runs the tests and the live feed tests on the commit to release,
 2. requires a higher version in `package.json` than the latest one on npm,
-3. publishes that commit as the GitHub release `v<version>`,
+3. publishes that commit as the GitHub release `v<version>`, and
 4. publishes it to npm, with a provenance statement that ties the package to
-   this repository and commit, and
-5. moves the `stable` branch to it, for older pipelines that still install
-   straight from this repository (`#stable`).
+   this repository and commit.
 
 It has a "dry run" option that does steps 1 and 2 and changes nothing.
 

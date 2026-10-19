@@ -1,6 +1,6 @@
 name: Release
-# Publishes a tested commit to npm and as a GitHub release, and moves the "stable" branch
-# that older pipelines install from. Started by hand from the Actions tab.
+# Publishes a tested commit to npm and as a GitHub release. Started by hand from the
+# Actions tab.
 #
 # npm accepts the upload because this workflow is registered as the package's trusted
 # publisher on npmjs.com (package settings -> Trusted publishing: GitHub Actions,
@@ -17,7 +17,7 @@ on:
         type: boolean
         default: false
 permissions:
-  contents: write # the GitHub release and the stable branch
+  contents: write # the GitHub release
   id-token: write # npm trusted publishing and provenance
 jobs:
   release:
@@ -26,8 +26,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
-          fetch-depth: 0 # the full history is needed to check that stable only moves forward
-          persist-credentials: true # the last step pushes the stable branch
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -72,18 +71,7 @@ jobs:
           fi
           if [ -n "$TAGGED" ]; then echo "tag_exists=true" >> "$GITHUB_OUTPUT"; DONE=$((DONE + 1)); fi
 
-          # stable only ever moves forward, so a pipeline never gets older code than before
-          if git fetch --quiet origin refs/heads/stable:refs/remotes/origin/stable 2>/dev/null; then
-            STABLE=$(git rev-parse origin/stable)
-            if [ "$STABLE" = "$SHA" ]; then
-              DONE=$((DONE + 1))
-            elif ! git merge-base --is-ancestor "$STABLE" "$SHA"; then
-              echo "::error::stable ($STABLE) is not part of this commit's history, so this would move it backwards or sideways."
-              exit 1
-            fi
-          fi
-
-          if [ "$DONE" = 3 ]; then
+          if [ "$DONE" = 2 ]; then
             echo "::notice::$VERSION is already released from this commit; nothing to do."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
@@ -96,15 +84,9 @@ jobs:
         run: gh release create "v$VERSION" --target "$SHA" --title "v$VERSION" --generate-notes
       - name: Publish to npm
         if: ${{ !inputs.dry_run && steps.check.outputs.skip != 'true' && steps.check.outputs.npm_done != 'true' }}
-        run: npm publish --provenance
-      - name: Move stable
-        if: ${{ !inputs.dry_run && steps.check.outputs.skip != 'true' }}
-        env:
-          SHA: ${{ steps.check.outputs.sha }}
-          VERSION: ${{ steps.check.outputs.version }}
         run: |
-          git push origin "$SHA:refs/heads/stable"
-          echo "::notice::Version $VERSION ($SHA) is released: npm latest, GitHub release v$VERSION and stable."
+          npm publish --provenance
+          echo "::notice::Version ${{ steps.check.outputs.version }} is released: npm latest and GitHub release v${{ steps.check.outputs.version }}."
       - name: Dry run summary
         if: ${{ inputs.dry_run && steps.check.outputs.skip != 'true' }}
         run: echo "::notice::Dry run passed. Version ${{ steps.check.outputs.version }} could be released; nothing was changed."

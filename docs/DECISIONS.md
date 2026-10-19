@@ -266,8 +266,8 @@ when a release is published, and only through the "Release" workflow
 (formerly "Promote to stable"), which keeps the same checks and now requires
 a version higher than the latest one on npm. `@latest` is written out
 because `npx` without a version can reuse a copy cached on the build agent.
-The workflow still moves `stable`, so pipelines set up before this change
-keep getting updates; it can stop once none are left. npm accepts the
+No pipeline installed from `stable` any more, so the branch and the
+workflow steps that moved it were removed. npm accepts the
 upload through trusted publishing (OIDC), so no npm token is stored in the
 repository. The package ships only `bin/` and `src/`.
 
