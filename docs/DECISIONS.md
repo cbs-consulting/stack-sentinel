@@ -19,6 +19,10 @@ Status as of 2026-10-11. Everything here was decided on that day unless noted.
 - [Check: cf-node-version](#check-cf-node-version)
 - [Check: cap-version](#check-cap-version)
 - [Check: npm-audit](#check-npm-audit)
+- [Check: license](#check-license)
+- [Fix pull requests](#fix-pull-requests)
+- [Ignore rules, release age and release notes](#ignore-rules-release-age-and-release-notes)
+- [Dashboard](#dashboard)
 - [Deliberately not built](#deliberately-not-built)
 - [Unverified and open](#unverified-and-open)
 
@@ -529,6 +533,182 @@ are not part of the deployed app.
 **Only npm lockfiles.** CAP and UI5 projects use npm. yarn and pnpm lockfiles
 have different formats and are not read.
 
+## Check: license
+
+Decided 2026-10-30, asked for because companies that build with the tool
+need to know which licenses they ship.
+
+**Licenses come from the lockfile.** npm copies each package's `license`
+into lockfile versions 2 and 3, so the check needs no network and no
+`node_modules`. Lockfile version 1 has none and is only reported as such;
+fetching every package from the registry would be slow for a gap that
+`npm install` with any current npm closes.
+
+**The default policy denies strong copyleft only.** AGPL, GPL, SSPL, EUPL
+and OSL can oblige a company to publish its own code; that is the risk a
+check should catch without being told. Weak copyleft (LGPL, MPL) and
+permissive licenses pass. A stricter company sets `license.allow`, and every
+license not on it becomes a warning. Lists match ids without their `-only`,
+`-or-later` or `+` variant, as policies are usually written per license.
+
+**A package without an SPDX license is info by default.** SAP's own packages,
+`@sap/cds` among them, declare `"SEE LICENSE IN LICENSE"`, so a warning
+would hit every CAP project. `license.unknown` raises it for companies that
+want each one reviewed. Approvals for single packages are ignore rules, with
+a reason, rather than another list.
+
+## Fix pull requests
+
+Decided 2026-10-29.
+
+**The tool may change the repository it runs in, but only on request.** Until
+now it only read and reported. A Dependabot-like mode was asked for, so that a
+finding comes with the change that fixes it. It is off by default
+(`fix.mode`): `apply` changes the scanned files, `pr` opens pull requests.
+
+**Only safe text edits.** A fix is made when the finding's action names one
+value in one file: UI5 versions in `ui5.yaml`, bootstrap URLs and the Work
+Zone pin, Node.js versions in `"engines.node"` and version files, and npm
+overrides that no longer do anything. `minUI5Version` is a statement of
+support and is never raised. A missing
+`"engines.node"` is only added for Cloud Foundry apps, which run on the
+buildpack default anyway; elsewhere the version would be a guess. A
+range is only rewritten when it is a plain lower bound (`>=18`).
+
+**Two opt-in groups run npm, the one child process the tool starts.** CAP
+majors and vulnerable packages need a lockfile update, and only npm writes a
+lockfile correctly; a hand-written one would be a guess. When asked for
+(`fix.groups` names `cap` or `npm-audit`, neither is on by default), npm runs
+with `--package-lock-only --ignore-scripts` in a temporary folder holding
+only `package.json`, `package-lock.json` and `.npmrc`: nothing is installed,
+no package scripts run, and the checkout is not touched. The scan itself
+still starts no process. For a lockfile that covers npm workspaces, every
+workspace's `package.json` goes into the folder too, found from the
+lockfile's own list of them, so npm sees the whole project. `cap` opens as a
+draft, because a new major can need code changes, and is never set to
+auto-merge. `npm-audit` only takes findings where `npm audit fix` can do the
+work after raising a range in the project's or a workspace's own `package.json`, keeping its
+style (exact stays exact, `~` stays `~`); afterwards it checks that each
+package moved, and drops what npm left, with its raised range, so a
+`package.json` never asks for what the lockfile does not hold. `npm audit
+fix` may move other packages within their ranges too; the pull request says
+so.
+
+**For Node.js, what Cloud Foundry ships wins.** `node-version` recommends the
+newest long-term support release, `cf-node-version` the line the buildpack
+keeps longest. When both want to change the same `"engines.node"`, the
+buildpack's choice is taken, because a version it does not ship fails
+staging.
+
+**Fixes are data on the finding.** Each fixable finding carries a `fix`
+(`kind`, `to`, ...) beside its `action`, set where the action is, so the edit
+is never parsed back out of a sentence. Each edit changes only its value and
+first checks that the file still holds what the scan saw. A `package.json`
+is only rewritten when it is laid out the way npm writes it.
+
+**Every run reports from the inside, and so does every fix.** The pull
+request is opened by the same scheduled pipeline, with the pipeline's own
+token, so nobody needs outside access to a repository.
+
+**Still stateless: the pull requests are the memory.** One pull request per
+kind of fix, on a branch whose name never changes, so each run finds the one
+an earlier run opened and updates it. A hidden line in its description names
+the versions it moves to; a pull request closed without merging and naming
+the same versions means "not wanted", like Dependabot's ignore. A pull
+request whose findings are gone is closed, unless its check did not run
+cleanly.
+
+**REST APIs instead of git.** Commits are made through GitHub's Git data API
+and Azure Repos' pushes API, with `fetch`. No git client, no credentials on
+disk, and the edit is made to the default branch as it is, not to whatever
+the pipeline checked out.
+
+**GitHub uses `GITHUB_TOKEN` unless `SENTINEL_FIX_TOKEN` is set.** It needs
+no setup beyond one repository setting, which was asked for ("easiest for the
+user"). Its cost: GitHub starts no workflows for pull requests it opens, so
+their checks do not run until someone pushes or reopens. A GitHub App or
+fine-grained token in `SENTINEL_FIX_TOKEN` avoids that.
+
+**Auto-merge is opt-in and waits for checks.** `fix.autoMerge` (`patch` or
+`all`) turns on the platform's own auto-merge, which merges once required
+checks or branch policies pass. A pull request is never merged directly: a
+repository without required checks gets a message, not a merge. `patch`
+means every change moves to a newer patch of the same release line; adding
+a pin or moving to another line is not a patch.
+
+**Major version moves are normal pull requests.** Moving to a new UI5 release
+line is opened like a patch; the project's own checks decide.
+
+## Ignore rules, release age and release notes
+
+Decided 2026-10-30, after comparing the tool with Dependabot, Renovate, Snyk,
+Socket and OSV-Scanner. These three were picked from a longer list because
+they are small and make fix pull requests safer to merge by themselves.
+
+**Ignore rules live in the config file and end on a date.** Snyk's `.snyk`
+file and Dependabot's `ignore` are the models. A finding the team accepts
+would otherwise come back on every run, and the only way out was a lower
+threshold or skipping the whole check. In the repository, the decision is
+reviewed like any change; `until` brings it back for review instead of
+hiding it for good. An expired rule and one that matches nothing are
+reported as info, so the list does not rot. A rule must name more than a
+check, because hiding all of a check's findings, including future ones, is
+what `skipChecks` is for and should look like that.
+
+**Advisories are ignored one at a time.** npm-audit makes one finding per
+package, but a package can have several advisories. Ignoring the finding when
+any advisory is named would hide the others; so the check leaves out the
+named advisories and judges the package by the rest, and only a package with
+none left is set aside.
+
+**Release age is one setting for everything, off by default.** Renovate's
+`minimumReleaseAge` and Dependabot's cooldown are the models: a release that
+turns out broken or malicious is usually withdrawn within days, and
+auto-merge would otherwise take it within hours. It is a top-level setting,
+not a fix setting, because the UI5 check's recommendations follow it too, so
+the finding and the pull request name the same patch. SAP's version feed has
+no dates; the build timestamp in each patch's `sap-ui-version.json` on the
+CDN is the closest thing, read only when the setting is on, at most ten
+patches back per release line. OpenUI5's npm package has publish dates, but
+its patch numbers do not follow SAPUI5's. A CDN that cannot be reached
+makes the check fail, rather than recommend a patch whose age is unknown.
+For npm, `--before` lets npm do the choosing, so the age applies to every
+package npm moves, not only the one named. It applies to security fixes as
+well: that is the safer default for auto-merged pull requests, and `0`
+turns it off.
+
+**Release notes come from where each project publishes them.** Renovate and
+Dependabot put release notes in their pull requests, which is what makes a
+pull request reviewable without leaving it. UI5, Node.js and CAP publish
+change logs at fixed addresses, so those are links. npm packages have no
+common place; GitHub releases are the most common, found through the
+`repository` field of the package's latest version. Their text is someone
+else's: mentions and issue references are broken, and GitHub links go
+through `redirect.github.com`, as Dependabot does, so a fix pull request does
+not notify strangers or appear in their issues. Reading them is best effort;
+a failure becomes a link and never stops the pull request. Azure DevOps gets
+links only, because its 4000-character description limit would cut the
+table.
+
+## Dashboard
+
+Decided 2026-10-30.
+
+**A dashboard is opt-in and lives where work is planned.** Renovate's
+Dependency Dashboard is the model. The Teams card reaches whoever reads the
+channel; a GitHub issue or an Azure DevOps work item reaches whoever plans
+the work, and it always shows the current state instead of a stream of
+cards. It is off by default because it writes to the repository's issues or
+the project's work items, which some teams keep for their own use. Each
+run replaces the whole text: merging edits back would need state, and the
+project's config is the place to change what it says. On Azure DevOps it is
+a work item, as Azure Repos has no issues; work items belong to the project,
+so the title (which names the scanned project) tells repositories apart. Its
+description is HTML, so the dashboard is built as blocks that render to
+Markdown or HTML, rather than converting one into the other. A closed
+dashboard is not reopened: the next run makes a new one, and turning the
+setting off is how to stop it.
+
 ## Deliberately not built
 
 | Idea | Why not, or not yet |
@@ -542,6 +722,14 @@ have different formats and are not read.
 
 ## Unverified and open
 
+- **Fix pull requests were tried on one GitHub test repository only**
+  (2026-10-29: opened, and left unchanged on the next run; every group, the
+  workflow-file fallback and a refused auto-merge seen there). A successful
+  auto-merge, and a run with a `SENTINEL_FIX_TOKEN` that may change workflow
+  files, were not. The Azure DevOps
+  calls are tested against recorded shapes only, and it is assumed that the
+  build service may delete the branches it created, which is how a branch
+  left from a closed pull request starts over.
 - **Nobody has seen a real Teams card.** The payload is tested for shape, not
   for how Teams renders it.
 - **Not yet run on a customer project or in a customer pipeline.** Detection

@@ -57,6 +57,7 @@ the file has to be edited.
 | [`cf-node-version`](docs/CHECKS.md#cf-node-version) | Node.js apps on Cloud Foundry asking for a version the buildpack no longer ships | Cloud Foundry Node.js buildpack |
 | [`cap-version`](docs/CHECKS.md#cap-version) | CAP packages on a major version SAP no longer supports | npm registry |
 | [`npm-audit`](docs/CHECKS.md#npm-audit) | Installed npm packages with known vulnerabilities | npm audit service |
+| [`license`](docs/CHECKS.md#license) | Installed npm packages whose license the policy does not allow, such as strong copyleft | `license.deny` and `license.allow` |
 
 Every finding has a severity (`error`, `warn`, `info` or `ok`), and those that
 call for a change say what to change, for example "Set framework.version to
@@ -106,10 +107,23 @@ its value and where it came from.
 | `scan.exclude` | `--exclude` | `SENTINEL_SCAN_EXCLUDE` | `node_modules,.git,dist,build,gen,coverage,.cache` | Folder names that are not scanned (replaces the default list) |
 | `scan.maxDepth` | `--max-depth` | `SENTINEL_SCAN_MAX_DEPTH` | `8` | How many folder levels deep to scan |
 | `notify.maxFindings` |  | `SENTINEL_NOTIFY_MAX_FINDINGS` | `25` | Most findings listed in one Teams card |
+| `minReleaseAgeDays` |  | `SENTINEL_MIN_RELEASE_AGE_DAYS` | `0` | Recommend and move to UI5 patches and npm packages only once they were published this many days ago; 0 turns it off (see [Fix pull requests](#fix-pull-requests)) |
+| `dashboard.enabled` |  | `SENTINEL_DASHBOARD_ENABLED` | `false` | Keep one issue (GitHub) or work item (Azure DevOps) up to date with the latest report, open fix pull requests and ignored findings (see [Dashboard](#dashboard)) |
+| `dashboard.title` |  | `SENTINEL_DASHBOARD_TITLE` | `stack-sentinel: {project}` | Title of the dashboard (`{project}` is the project name) |
+| `dashboard.label` |  | `SENTINEL_DASHBOARD_LABEL` | `stack-sentinel` | Label (GitHub) or tag (Azure DevOps) the dashboard is found by |
+| `dashboard.workItemType` |  | `SENTINEL_DASHBOARD_WORK_ITEM_TYPE` | `Task` | Azure DevOps: the work item type of the dashboard |
+| `fix.mode` | `--fix` | `SENTINEL_FIX_MODE` | `off` | Fix what can be fixed safely: apply changes the scanned files, pr opens a pull request per kind of fix (see [Fix pull requests](#fix-pull-requests)): `off`, `apply`, `pr` |
+| `fix.groups` | `--fix-groups` | `SENTINEL_FIX_GROUPS` | `ui5,node,npm-overrides` | Kinds of fix to make, one pull request each: ui5 (UI5 versions), node (Node.js versions), npm-overrides (npm overrides no longer needed); and, off by default, cap (CAP major upgrades, as draft pull requests) and npm-audit (vulnerable npm packages; runs npm) |
+| `fix.on` | `--fix-on` | `SENTINEL_FIX_ON` | `info` | Fix findings at or above this severity: `ok`, `info`, `warn`, `error` |
+| `fix.token` |  | `SENTINEL_FIX_TOKEN` |  | Token that opens the pull requests (default: `GITHUB_TOKEN` or `SYSTEM_ACCESSTOKEN`; not read from the config file) |
+| `fix.autoMerge` |  | `SENTINEL_FIX_AUTO_MERGE` | `off` | Let fix pull requests merge by themselves once their checks pass: patch for those that only move to a newer patch of the same version, all for every one: `off`, `patch`, `all` |
+| `fix.branchPrefix` |  | `SENTINEL_FIX_BRANCH_PREFIX` | `stack-sentinel/` | Start of the branch names of fix pull requests |
+| `fix.maxPullRequests` |  | `SENTINEL_FIX_MAX_PULL_REQUESTS` | `5` | Most fix pull requests open at the same time |
 | `ui5.feed` |  | `SENTINEL_UI5_FEED` | `https://ui5.sap.com/versionoverview.json` | Version overview feed: a URL, or a path to a downloaded copy |
 | `ui5.requireLts` |  | `SENTINEL_UI5_REQUIRE_LTS` | `true` | Warn about versions that are not long-term maintenance |
 | `ui5.warnDays` |  | `SENTINEL_UI5_WARN_DAYS` | `180` | Warn this many days before an end date |
 | `ui5.maintenanceDate` |  | `SENTINEL_UI5_MAINTENANCE_DATE` | `eomm` | End-of-maintenance date to use: eomm is the SAP BTP date shown on the version overview page, eom the feed's second date: `eomm`, `eom`, `earliest` |
+| `ui5.versionInfoUrl` |  | `SENTINEL_UI5_VERSION_INFO_URL` | `https://ui5.sap.com/{version}/resources/sap-ui-version.json` | Where the build date of a UI5 patch is read, for minReleaseAgeDays (`{version}` is replaced) |
 | `ui5.cdnHosts` |  | `SENTINEL_UI5_CDN_HOSTS` | `ui5.sap.com,sapui5.hana.ondemand.com,openui5.hana.ondemand.com,sdk.openui5.org` | Hosts recognised in bootstrap URLs (replaces the default list) |
 | `ui5.yamlPattern` |  | `SENTINEL_UI5_YAML_PATTERN` | `(^\|/)ui5([-.][\w.-]+)?\.ya?ml$` | Files read as UI5 tooling config (regex on the relative path) |
 | `ui5.htmlPattern` |  | `SENTINEL_UI5_HTML_PATTERN` | `\.html?$` | Files searched for a bootstrap URL (regex on the relative path) |
@@ -120,6 +134,8 @@ its value and where it came from.
 | `node.requireLts` |  | `SENTINEL_NODE_REQUIRE_LTS` | `true` | Warn when only non-LTS Node.js releases are allowed |
 | `node.warnDays` |  | `SENTINEL_NODE_WARN_DAYS` | `180` | Warn this many days before end of life |
 | `node.packagePattern` |  | `SENTINEL_NODE_PACKAGE_PATTERN` | `(^\|/)package\.json$` | Files read for "engines.node" (regex on the relative path) |
+| `node.ciPattern` |  | `SENTINEL_NODE_CI_PATTERN` | `(^\|/)(\.github/workflows/[^/]+\|azure-pipelines[^/]*\|\.azure-pipelines/[^/]+)\.ya?ml$` | CI pipeline files read for the Node.js version they set up (regex on the relative path) |
+| `node.containerPattern` |  | `SENTINEL_NODE_CONTAINER_PATTERN` | `(^\|/)(Dockerfile\|Containerfile)([.-][\w.-]+)?$` | Dockerfiles read for the node image they build on (regex on the relative path) |
 | `node.versionFilePattern` |  | `SENTINEL_NODE_VERSION_FILE_PATTERN` | `(^\|/)\.(nvmrc\|node-version)$` | Files read as Node.js version files (regex on the relative path) |
 | `cf.feed` |  | `SENTINEL_CF_FEED` | `https://raw.githubusercontent.com/cloudfoundry/nodejs-buildpack/master/manifest.yml` | Manifest of the Cloud Foundry Node.js buildpack: a URL, or a path to a downloaded copy |
 | `cf.warnDays` |  | `SENTINEL_CF_WARN_DAYS` | `180` | Warn this many days before a Node.js line leaves the buildpack |
@@ -135,6 +151,10 @@ its value and where it came from.
 | `audit.reportFrom` |  | `SENTINEL_AUDIT_REPORT_FROM` | `moderate` | Vulnerabilities below this advisory severity are not reported: `info`, `low`, `moderate`, `high`, `critical` |
 | `audit.warnAt` |  | `SENTINEL_AUDIT_WARN_AT` | `high` | Advisory severity from which a vulnerability is a warning (below: info): `info`, `low`, `moderate`, `high`, `critical` |
 | `audit.errorAt` |  | `SENTINEL_AUDIT_ERROR_AT` | `critical` | Advisory severity from which a vulnerability is an error: `info`, `low`, `moderate`, `high`, `critical` |
+| `license.lockfilePattern` |  | `SENTINEL_LICENSE_LOCKFILE_PATTERN` | `(^\|/)(package-lock\|npm-shrinkwrap)\.json$` | Lockfiles whose installed packages' licenses are checked (regex on the relative path) |
+| `license.deny` |  | `SENTINEL_LICENSE_DENY` | `AGPL-1.0,AGPL-3.0,GPL-1.0,GPL-2.0,GPL-3.0,SSPL-1.0,EUPL-1.1,EUPL-1.2,OSL-3.0` | SPDX license ids that are errors (strong copyleft by default; -only and -or-later variants match; replaces the default list) |
+| `license.allow` |  | `SENTINEL_LICENSE_ALLOW` | `(none)` | SPDX license ids that are allowed; when set, any other license is a warning (default: everything not denied) |
+| `license.unknown` |  | `SENTINEL_LICENSE_UNKNOWN` | `info` | Severity for a package without an SPDX license, e.g. "SEE LICENSE IN LICENSE" or none: `ok`, `info`, `warn`, `error` |
 
 List values are comma-separated in flags and environment variables, and JSON
 arrays in the config file. Example config:
@@ -168,6 +188,51 @@ Notes on the UI5 settings:
 - `ui5.probes` (config file only) is a list of `{ "name", "url" }` for systems
   that host their own UI5 library. Each URL must return JSON with a top-level
   `version` field. Apps on SAP BTP do not need one.
+
+<a id="ignore"></a>
+
+## 🙈 Ignoring findings
+
+A finding the team has looked at and decided to live with, for now, can be
+ignored in the config file. Each rule names what it matches, and ends on a
+date, so the decision comes back for review instead of being forgotten:
+
+```json
+{
+  "ignore": [
+    { "advisory": "GHSA-29mw-wpgm-hmr9", "until": "2027-01-31", "reason": "lodash is only used by a build script" },
+    { "check": "ui5-version", "file": "^legacy/", "until": "2026-12-31", "reason": "The legacy app is retired in December" },
+    { "check": "cap-version", "package": "@sap/cds", "version": "8.9.4" }
+  ]
+}
+```
+
+| Field | Matches |
+| --- | --- |
+| `check` | The check id (see [Checks](#checks)) |
+| `file` | The finding's file (regex on the relative path) |
+| `package` | An npm package (`npm-audit`, `cap-version`) |
+| `version` | The version the finding is about, exactly |
+| `advisory` | A vulnerability, by GitHub advisory id (`GHSA-...`) or npm advisory number |
+| `message` | The finding's text (regex) |
+| `until` | Last day the rule applies (`YYYY-MM-DD`); without it, the rule never ends |
+| `reason` | Why, shown with the ignored finding |
+
+- **Every field a rule gives must match**, and it must give at least one of
+  `file`, `package`, `version`, `advisory` or `message`. To stop a whole
+  check, use `skipChecks` instead.
+- **An ignored advisory is left out on its own.** A package with other
+  advisories is still reported, with the severity of the ones that are left.
+- **Ignored findings are not notified, do not fail the run and are not
+  fixed.** The report lists them under `ignored`, with the reason and date,
+  and the Teams card says how many there are.
+- **A rule past its date stops applying**, and the report says so (info), so
+  the finding is back and the rule can be removed or given a new date.
+- **A rule that matches nothing is reported too** (info), once every check it
+  could match has run cleanly.
+- A rule that cannot be read stops the run with exit code `2`.
+- `ignore` can also be set in a [shared config](#shared-config). As with
+  other lists, a project's own `ignore` list replaces it.
 
 <a id="shared-config"></a>
 
@@ -252,6 +317,134 @@ remove the variable afterwards. The last lines of the tool's output say
 whether a notification was sent, and if not, why: no webhook address reached
 the tool (usually a missing or misnamed secret), or the status was below the
 threshold.
+
+<a id="fix-pull-requests"></a>
+
+## 🔧 Fix pull requests
+
+With `SENTINEL_FIX_MODE=pr` the scheduled run also opens pull requests that
+fix what can be fixed safely, much like Dependabot. By default only edits that
+change one version in one file are made:
+
+| Check | What is changed |
+| --- | --- |
+| `ui5-version` | `framework.version` and the fiori-tools-proxy `ui5.version` in `ui5.yaml`, the version in CDN bootstrap URLs (a version is added where none is set), and `"sap.platform.cf".ui5VersionNumber` in `manifest.json` (added where it is missing). A fiori-tools-proxy without a version gets the one the app builds with (`framework.version` in a `ui5*.yaml` of the same folder), or else the recommended one |
+| `node-version`, `cf-node-version` | The Node.js version in CI pipelines (`setup-node`, `NodeTool`, `UseNode`) and in `FROM node:<tag>` is moved to the recommended major. `.nvmrc` and `.node-version` are set to the recommended Node.js major, `"engines.node"` to `^<major>`, a plain lower bound such as `>=18` is raised, an exact version on Cloud Foundry (`22.11.0`) becomes a range the buildpack can stage (`22.x`), and a Cloud Foundry app that declares none gets `"engines.node"` for the line the buildpack keeps longest. Where the two checks disagree, the version the Cloud Foundry buildpack ships wins |
+| `npm-audit` | Overrides in `package.json` that are unused or no longer needed are removed |
+
+Two more kinds run npm to bring `package-lock.json` up to date, and are only
+made when `fix.groups` names them:
+
+| Group | What is changed |
+| --- | --- |
+| `cap` | A CAP package (`cap-version`) on an old major moves to `^<current major>` in `package.json`, and the lockfile next to it is updated with `npm install --package-lock-only --ignore-scripts`. It opens as a **draft**, as a new major can need code changes (see the [CAP release notes](https://cap.cloud.sap/docs/releases/)) |
+| `npm-audit` | Vulnerable packages that `npm audit fix` can move on its own, after raising a range the project's own `package.json` pins below the fix to the oldest published release that fixes it (`"lodash": "4.17.20"` becomes `"4.18.0"`), are moved with `npm install` and `npm audit fix`, both with `--package-lock-only --ignore-scripts`. A package that a dependency's own range or a bundled copy holds back is left to a person, and so is a package npm did not move |
+
+npm runs in a temporary folder with only `package-lock.json`, `.npmrc` and
+the `package.json` files the lockfile covers (the project's and those of its
+npm workspaces), so no packages are installed and no package scripts run. It
+needs `npm` on the path and access to the registry, as an `npm install` has.
+
+Nothing else is changed automatically: not `minUI5Version`, which states
+which versions an app supports, and not a missing `"engines.node"` outside
+Cloud Foundry, which would be a guess.
+
+- **One pull request per kind of fix**, on a branch whose name never changes
+  (`stack-sentinel/ui5`, `stack-sentinel/node`, `stack-sentinel/npm-overrides`, `stack-sentinel/cap`,
+  `stack-sentinel/npm-audit`). Each run updates it
+  while the findings remain, for example to a newer patch, and closes it when
+  they are gone.
+- **Closing a pull request without merging** skips those versions: the next
+  run opens a new one only when there is a newer version to move to.
+- **The edits are made to the default branch** as it is at the time of the
+  run. A change whose file no longer holds the version the scan saw is left
+  out.
+- **Choose what is fixed** with `fix.groups`: `SENTINEL_FIX_GROUPS=ui5`
+  fixes UI5 versions only, and leaves npm overrides to be reported;
+  `SENTINEL_FIX_GROUPS=ui5,node,npm-overrides,cap,npm-audit` turns on all of
+  them. A pull request of a kind that is turned off is left open as it is.
+- **Workflow files on GitHub** (`.github/workflows/*.yml`) can only be
+  changed by a token with the "Workflows" permission, which `GITHUB_TOKEN`
+  cannot have. Without one, they are left out of the pull request, which
+  says so, and the rest goes through.
+- **Auto-merge** is off by default. `SENTINEL_FIX_AUTO_MERGE=patch` turns it
+  on for pull requests that only move to newer patches (UI5 1.148.12 to
+  1.148.13), `all` for every one. The pull request is then merged once its
+  required checks pass, never before: on GitHub this needs "Allow
+  auto-merge" and a branch protection rule with required checks, and since
+  checks do not start for pull requests opened with `GITHUB_TOKEN`, a
+  `SENTINEL_FIX_TOKEN`. On Azure DevOps it sets the pull request to complete
+  by itself once its branch policies pass. If it cannot be turned on, the
+  pull request stays open and the output says why. Draft pull requests
+  (`cap`) are never set to merge.
+- **Release notes** are part of each pull request: links to the SAPUI5
+  change log of the new version, the Node.js change log of the new major and
+  the CAP release notes. For `npm-audit`, each package lists the advisories
+  it fixes and, when its repository is on GitHub, the release notes published
+  there between the old and the new version (the newest five, folded). Text
+  from those releases cannot notify anyone or link issues: mentions and
+  `#123` references are broken, and GitHub links go through
+  `redirect.github.com`. On GitHub Actions the requests use the pipeline's
+  token, against the API's rate limit for anonymous use. On Azure DevOps,
+  whose descriptions hold 4000 characters, there are links only. Release
+  notes that cannot be read become a link; they never stop a pull request.
+- **Wait before moving to a new release** with `minReleaseAgeDays`, like
+  Renovate's `minimumReleaseAge`: `SENTINEL_MIN_RELEASE_AGE_DAYS=3` moves
+  only to releases that have been out for three days, so a broken or
+  hijacked release is usually withdrawn before a pull request picks it up.
+  This matters most with auto-merge. A UI5 patch counts from the build date
+  on the SAP CDN (`sap-ui-version.json`), and until it is old enough the
+  findings recommend the patch before it. For `cap` and `npm-audit`, npm gets
+  `--before`, so it picks only releases published before then; a
+  vulnerability whose only fix is newer stays open, and the pull request
+  says so. Node.js fixes name a major version, not a release, and are not
+  held back. It is off (`0`) by default, and applies to security fixes too.
+- **At most `fix.maxPullRequests`** (default 5) are open at a time.
+- **Moving to a new release line** (UI5 1.120 to 1.148, Node.js 20 to 24) is a normal pull
+  request too. The project's own checks on the pull request are what show
+  whether the app still works.
+- The links to the pull requests are on the Teams card and in the JSON report
+  (`pullRequests`).
+- `SENTINEL_FIX_MODE=apply` (or `--fix apply`) only changes the files in the
+  scanned folder, for a local run or a pipeline of your own.
+
+| | GitHub Actions | Azure DevOps (Azure Repos) |
+| --- | --- | --- |
+| Turn it on | Variable `SENTINEL_FIX_MODE` = `pr` | Pipeline variable `SENTINEL_FIX_MODE` = `pr` |
+| Allow it once | Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests" | Project settings → Repositories → the repository → Security → the project's build service: "Contribute" and "Contribute to pull requests" |
+| Token | The workflow's own `GITHUB_TOKEN`; nothing to set | `$(System.AccessToken)`, mapped in the example |
+| The pull request's checks | GitHub starts no workflows for pull requests opened with `GITHUB_TOKEN`. To have them run, set the secret `SENTINEL_FIX_TOKEN` to a GitHub App token or a fine-grained personal access token with "Contents" and "Pull requests" write access | Run as usual |
+| An open pull request after the default branch moved | Rebuilt on top of the default branch | Gets a commit on top, because pipelines may not force-push |
+
+The examples already carry the permissions and the token mapping, so turning
+it on needs no change to the pipeline file.
+
+<a id="dashboard"></a>
+
+## 📋 Dashboard
+
+With `SENTINEL_DASHBOARD_ENABLED=true`, every run keeps one issue (GitHub) or
+work item (Azure DevOps) up to date, like Renovate's Dependency Dashboard. It
+is where people find the state of the stack without the Teams channel: every
+finding with what to do, the open fix pull requests (and those not opened, with
+why), and the ignored findings with their reason and end date. The Teams card
+links it.
+
+- **One per repository**, titled `stack-sentinel: <project>` (`dashboard.title`)
+  and found again by its label or tag (`dashboard.label`). Each run replaces its
+  text, so edits to it are lost; change the project instead.
+- **Closing it does not stop it**: the next run opens a new one. Turn
+  `dashboard.enabled` off to stop.
+- It is written after the fix pull requests, so it links the ones this run
+  opened. It does not depend on `fix.mode`.
+- If it cannot be written, the report is still sent, and the run then exits
+  with code `2`.
+
+| | GitHub Actions | Azure DevOps |
+| --- | --- | --- |
+| What it is | An issue with the label `stack-sentinel` | A work item of type `Task` (`dashboard.workItemType`) with the tag `stack-sentinel`, in the pipeline's project |
+| Allow it once | `issues: write` in the workflow's permissions (the example has it) | The project's build service needs "Edit work items in this node" on the area path (Project settings → Project configuration → Areas) |
+| Token | `GITHUB_TOKEN` or `SENTINEL_FIX_TOKEN` | `$(System.AccessToken)`, mapped in the example |
 
 <a id="heartbeat"></a>
 

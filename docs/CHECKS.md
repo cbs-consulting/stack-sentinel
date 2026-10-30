@@ -4,6 +4,8 @@ What each check looks at and when it reports what. Back to the [README](../READM
 
 `stack-sentinel --list-checks` prints the ids. Settings named here (`ui5.warnDays`, …) are listed in the README under [Settings](../README.md#settings).
 
+Some findings can be fixed automatically: they carry a `fix` in the JSON report, and `SENTINEL_FIX_MODE` applies them or opens pull requests for them (README, [Fix pull requests](../README.md#fix-pull-requests)).
+
 ## `ui5-version`
 
 Compares the UI5 versions a project uses with SAP's version overview feed
@@ -60,6 +62,8 @@ release schedule
 | --- | --- |
 | `package.json` → `engines.node` | The range of Node.js versions the project accepts; on Cloud Foundry the buildpack picks the runtime from it |
 | `.nvmrc`, `.node-version` | The version used for local development and CI |
+| CI pipelines (`.github/workflows/*.yml`, `azure-pipelines*.yml`) → `actions/setup-node` `node-version`, `NodeTool` `versionSpec`, `UseNode` `version` | The version the pipeline builds and tests with; expressions and build matrices are not read |
+| `Dockerfile`, `Containerfile` → `FROM node:<tag>` | The version of the official node image the container is built on |
 
 | Severity | When |
 | --- | --- |
@@ -168,6 +172,9 @@ The action depends on what the version ranges along the way allow:
 | It is bundled inside another package | Only a new release of that package fixes it |
 | No fixed version is known | Consider replacing it, or the direct dependency that brings it in |
 
+The first two rows carry a `fix`: with `fix.groups` naming `npm-audit`, the
+fix pull request raises the range and lets npm move the package (README, [Fix pull requests](../README.md#fix-pull-requests)).
+
 An `overrides` entry in `package.json` forces a version, and stays in force
 after the reason for it is gone. The check reads the `overrides` of the
 `package.json` next to each lockfile and reports an override as info when it
@@ -184,3 +191,31 @@ Plain overrides (`"pkg": "1.2.3"`, also `"pkg@range": …`) and overrides
 scoped one level under a parent (`"parent": { "pkg": "1.2.3" }`) are judged;
 deeper nesting is ignored. A range the check cannot read, such as a git URL,
 counts as still needing the override.
+
+## `license`
+
+Checks the licenses of the packages installed through `package-lock.json`
+(or `npm-shrinkwrap.json`) against a license policy. The licenses are the
+ones npm recorded in the lockfile from each package's `package.json`, so
+nothing is downloaded. Lockfile version 1 records no licenses; it gets one
+info finding saying so.
+
+| Severity | When |
+| --- | --- |
+| error | The license is on the deny list (`license.deny`; by default strong copyleft: AGPL, GPL, SSPL, EUPL and OSL) |
+| warn | An allow list is set (`license.allow`) and the license is not on it |
+| info | The package declares no SPDX license, for example `"SEE LICENSE IN LICENSE"` (SAP's own packages do this) or nothing at all (`license.unknown`); or any of the above in a package used only for development, which is not shipped |
+| ok | Every installed package meets the policy |
+
+- **SPDX expressions are understood.** With `OR` a package may be used under
+  the best of its choices (`MIT OR GPL-2.0` is fine), with `AND` it must meet
+  all of them (`MIT AND AGPL-3.0` is not). `WITH` exceptions are read as the
+  license they modify.
+- **Ids match without their variant**: `GPL-3.0` on a list also matches
+  `GPL-3.0-only`, `GPL-3.0-or-later` and `GPL-3.0+`. Case does not matter.
+- **LGPL and MPL are not denied by default.** They are weak copyleft, which
+  most policies allow for libraries used unchanged. Add them to
+  `license.deny` if yours does not.
+- **A license that was approved for one package** is best recorded as an
+  [ignore rule](../README.md#ignore) with the reason, for example
+  `{ "check": "license", "package": "gpl-lib", "reason": "approved by legal, 2026-10" }`.

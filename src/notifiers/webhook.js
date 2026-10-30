@@ -23,11 +23,22 @@ export function teamsPayload(report, threshold, maxFindings) {
   if (shown.length > maxFindings) body.push({ type: 'TextBlock', isSubtle: true, text: `…and ${shown.length - maxFindings} more.` });
   // why the versions named in the actions: once per card, at the end
   for (const text of recommendations(relevant)) body.push({ type: 'TextBlock', isSubtle: true, wrap: true, text: `${text}.` });
+  if (report.ignored?.length) {
+    const n = groupFindings(report.ignored).length;
+    body.push({ type: 'TextBlock', isSubtle: true, wrap: true, text: `${n} finding${n === 1 ? ' is' : 's are'} ignored by rules in the config file.` });
+  }
+  const prs = (report.pullRequests ?? []).filter((pr) => pr.url && pr.action !== 'closed');
+  if (prs.length) {
+    body.push({ type: 'TextBlock', weight: 'Bolder', wrap: true, text: 'Fix pull requests' });
+    for (const pr of prs) body.push({ type: 'TextBlock', wrap: true, spacing: 'None', text: `[${pr.title}](${pr.url})${pr.action === 'created' ? ' (new)' : ''}` });
+  }
+  if (report.fixError) body.push({ type: 'TextBlock', wrap: true, text: `${ICON.error} Could not open fix pull requests: ${report.fixError}` });
   if (report.sharedConfig) body.push({ type: 'TextBlock', isSubtle: true, wrap: true, size: 'Small', text: `Shared config: ${report.sharedConfig}` });
   // buttons back to where the report came from
   const actions = [
     ...(report.links?.run ? [{ type: 'Action.OpenUrl', title: 'Open pipeline run', url: report.links.run }] : []),
     ...(report.links?.repository ? [{ type: 'Action.OpenUrl', title: 'Open repository', url: report.links.repository }] : []),
+    ...(report.dashboard?.url ? [{ type: 'Action.OpenUrl', title: 'Open dashboard', url: report.dashboard.url }] : []),
   ];
   return {
     type: 'message',
